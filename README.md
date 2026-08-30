@@ -3,7 +3,7 @@
 Secure-by-default building blocks for repository-scoped, self-cleaning GitHub Actions runners on shared macOS hosts.
 
 > [!IMPORTANT]
-> This repository currently contains the reviewed architecture only. It does not yet provide an installable runner controller or production release.
+> This repository currently contains the approved architecture and draft implementation plans under final consistency review. It does not yet provide an installable runner controller or production release.
 
 ## Why this project
 
@@ -30,14 +30,15 @@ Persistent cleanup is residue control, not VM isolation. Public forks, untrusted
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Implementation plan](docs/superpowers/plans/2026-08-30-macos-runner-guard-implementation.md)
 - [Security policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## Roadmap
 
-1. Approve the published architecture.
-2. Publish a detailed implementation plan.
-3. Implement the contract schema, renderer, cleanup engine, hooks, policy checks, and deterministic bundle builder.
+1. ~~Approve the published architecture.~~ Complete.
+2. Draft and independently review the detailed implementation plan; merge pending.
+3. Implement the contract schema, renderer, cleanup engine, hooks, policy checks, and deterministic bundle builder through the four reviewed child plans.
 4. Complete independent safety and security review.
 5. Publish the first reviewed pre-release.
 

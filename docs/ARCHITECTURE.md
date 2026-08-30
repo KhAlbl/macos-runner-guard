@@ -1,6 +1,6 @@
 # macOS Runner Guard — Architecture Design
 
-**Status:** Architecture candidate; implementation pending
+**Status:** Approved architecture; implementation pending
 
 **Date:** 2026-08-30
 
@@ -101,25 +101,53 @@ This profile may be used for routing and reliability among repositories trusted 
 
 ### 6.1 Toolkit source layout
 
-The implementation phase will use this layout:
+The implementation phase uses this core ownership layout. The detailed implementation plans enumerate the complete test, documentation, fixture, and validation-file inventory added under these roots.
 
 ```text
 macos-runner-guard/
+├── .github/
+│   ├── pull_request_template.md
+│   └── workflows/ci.yml
+├── pyproject.toml
+├── requirements/
+│   ├── validation.in
+│   └── validation.txt
 ├── src/runner_guard/
-│   ├── cleanup.py
+│   ├── __init__.py
+│   ├── __main__.py
+│   ├── activation.py
 │   ├── archive.py
+│   ├── bundle_runtime.py
 │   ├── capabilities.py
+│   ├── cleanup.py
+│   ├── cli.py
 │   ├── contract.py
+│   ├── errors.py
+│   ├── fsops.py
+│   ├── generation.py
+│   ├── inventory.py
+│   ├── job_identity.py
+│   ├── jsonio.py
+│   ├── manifest.py
+│   ├── policy.py
 │   ├── render.py
-│   ├── verify.py
-│   └── residue.py
+│   ├── residue.py
+│   ├── scanner.py
+│   ├── transition.py
+│   ├── workspace.py
+│   └── zip_format.py
 ├── schemas/instance-v1.schema.json
 ├── templates/
-│   ├── started-hook.sh
-│   ├── completed-hook.sh
+│   ├── activate.py
+│   ├── job-started.sh
+│   ├── job-completed.sh
 │   ├── workflow-guard.yml
-│   ├── workflow-policy.py
+│   ├── ADOPTION_CHECKLIST.md
+│   ├── AGENT_PROMPT.md
 │   ├── install-instance.sh
+│   ├── recover-instance.sh
+│   ├── remove-instance.sh
+│   ├── restore-instance.sh
 │   └── rollback-instance.sh
 ├── examples/
 │   ├── dedicated-account.json
@@ -142,10 +170,10 @@ macos-runner-guard/
 │   ├── SECURITY_MODEL.md
 │   ├── TROUBLESHOOTING.md
 │   └── LESSONS_LEARNED.md
-├── AGENT_ADOPTION_PROMPT.md
-├── MANIFEST.json
-└── SHA256SUMS
+└── AGENT_ADOPTION_PROMPT.md
 ```
+
+`MANIFEST.json` and `SHA256SUMS` are generated inside fresh artifact-staging directories and archives. They are not committed at the repository root, which avoids a control-file update on every source commit while preserving complete artifact coverage.
 
 ### 6.2 Instance contract
 
@@ -171,11 +199,11 @@ Pure contract validation and rendering are host-independent. They reject:
 
 - `/`, `/Users`, a home directory itself, or a root declared by another supplied instance contract as a mutable target;
 - overlapping mutable roots declared in the supplied contract set;
-- path traversal, unresolved variables, non-absolute paths, symlinked ancestors, and control characters;
+- path traversal, unresolved variables, non-absolute paths, and control characters;
 - account/home/profile combinations that contradict the claimed trust level;
-- a universal disk threshold copied without project measurement.
+- a `minimum_free_bytes` value with no recorded adopting-project measurement evidence. The pure validator checks only the explicit positive value; the adoption review verifies the measurement provenance.
 
-A separate host-bound verifier runs immediately before adoption or transition. It reads a fresh, redacted inventory and rejects collisions with live runner roots, labels, service/name prefixes, queued jobs, or active workers. For `dedicated-account`, any live reuse of the proposed account is also a collision. For `shared-account-trusted-only`, the acknowledged account reuse is allowed only when roots, labels, name prefixes, and service identities remain disjoint. Failure or lack of permission to prove the live inventory blocks adoption. Host inventory never changes rendered bytes and is never embedded in a portable ZIP.
+A separate host-bound verifier runs immediately before adoption or transition. It walks the declared ancestor chains without following links and reads a fresh, redacted inventory; it rejects symlinked or structurally invalid ancestors and collisions with live runner roots, labels, service/name prefixes, queued jobs, or active workers. For `dedicated-account`, any live reuse of the proposed account is also a collision. For `shared-account-trusted-only`, the acknowledged account reuse is allowed only when roots, labels, name prefixes, and service identities remain disjoint. Failure or lack of permission to prove the live inventory blocks adoption. Host inventory never changes rendered bytes and is never embedded in a portable ZIP.
 
 ### 6.3 Generated project bundle
 
@@ -184,21 +212,43 @@ For an instance named `<project-slug>`, the renderer creates:
 ```text
 instances/<project-slug>/
 ├── instance.json
+├── activate.py
 ├── cleanup_controller.py
 ├── job-started.sh
 ├── job-completed.sh
 ├── workflow-guard.yml
 ├── workflow-policy.py
 ├── install-instance.sh
+├── recover-instance.sh
 ├── rollback-instance.sh
+├── remove-instance.sh
+├── restore-instance.sh
 ├── residue-audit.py
 ├── ADOPTION_CHECKLIST.md
-├── AGENT_PROMPT.md
-├── MANIFEST.json
-└── SHA256SUMS
+└── AGENT_PROMPT.md
 ```
 
-The generated bundle is self-contained but remains a proposal until a project-specific review verifies repository workflows, host paths, account state, runner inventory, and registration scope.
+The renderer output is a closed 15-member inventory with exact modes:
+
+| Rendered path | Exact mode |
+|---|---:|
+| `instance.json` | `0444` |
+| `activate.py` | `0555` |
+| `cleanup_controller.py` | `0555` |
+| `job-started.sh` | `0555` |
+| `job-completed.sh` | `0555` |
+| `install-instance.sh` | `0555` |
+| `recover-instance.sh` | `0555` |
+| `rollback-instance.sh` | `0555` |
+| `remove-instance.sh` | `0555` |
+| `restore-instance.sh` | `0555` |
+| `residue-audit.py` | `0555` |
+| `workflow-guard.yml` | `0444` |
+| `workflow-policy.py` | `0555` |
+| `ADOPTION_CHECKLIST.md` | `0444` |
+| `AGENT_PROMPT.md` | `0444` |
+
+The pure renderer receives four explicit inputs: the validated contract, the exact ten component payloads, the reviewed template root, and the exact reviewed workflow-policy source bytes. It never discovers policy bytes through package paths, import state, the current directory, or live host state. The generated policy embeds canonical contract bytes through a deterministic hexadecimal bytes expression—not raw JSON as Python syntax—and its standalone CLI parses those bytes before evaluating a bounded workflow input. The renderer creates this payload only. Fresh per-instance artifact staging then adds `MANIFEST.json` and `SHA256SUMS` under the deterministic artifact contract in section 11. The resulting archive is self-contained but remains a proposal until a project-specific review verifies repository workflows, host paths, account state, runner inventory, and registration scope.
 
 ### 6.4 Root-protected instance and controller generations
 
@@ -233,7 +283,7 @@ controller/
 └── ACTIVE.json
 ```
 
-The minimal bootstrap hooks are stable, root-owned `/bin/bash` wrappers named by `.env`; they invoke root-owned `activate.py` through `/usr/bin/python3 -I -S`. That bootstrap opens and validates the root-owned `ACTIVE.json`, binds the declared immutable generation directory and manifest by descriptor and inode/device identity, and invokes that generation's cleanup controller. A generation is fully staged, hashed, ownership/mode checked, recursively synced, and made read-only before it can be activated. `ACTIVE.json` records the generation name and manifest hash and is replaced through one same-directory atomic rename followed by directory `fsync`. No mutable controller binary is shared between projects.
+The minimal bootstrap hooks are stable, root-owned `/bin/bash` wrappers named by `.env`; they invoke root-owned `activate.py` through `/usr/bin/python3 -I -S`. The toolkit builds that bootstrap as a deterministic, standard-library-only standalone program, so it never imports an installed package or user/site path at runtime. The bootstrap opens and validates the root-owned `ACTIVE.json`, binds the declared immutable generation directory and manifest by descriptor and inode/device identity, opens the selected cleanup controller without following links, hashes and compiles the already-opened verified bytes, executes them in an isolated namespace, and calls one explicit entry point while retaining the descriptor binding. A path swap after verification cannot change the executed bytes. A generation is fully staged, hashed, ownership/mode checked, recursively synced, and made read-only before it can be activated. `ACTIVE.json` records the generation name and manifest hash and is replaced through one same-directory atomic rename followed by directory `fsync`. No mutable controller binary is shared between projects.
 
 An interrupted transition cannot expose a partially staged generation: bootstrap ignores staging names and reads only `ACTIVE.json`. On startup, an orphan staging entry or transition journal causes a fail-closed recovery report; the active generation remains unchanged if its manifest is valid. An invalid active manifest never triggers an automatic fallback. A reviewed recovery helper either completes cleanup of the orphan or atomically reactivates the previously recorded generation.
 
@@ -349,7 +399,7 @@ The generated rollback helper verifies both generation manifests and atomically 
 
 ### 9.3 Removal
 
-Removal uses GitHub's supported exact runner-removal flow and exact instance ID. It never removes by a shared label, organization scope, or path glob. Local cleanup is bound to the exact instance root and refuses symlinked, foreign-owned, or unexpected content.
+Removal is deliberately two-step. First, the owner uses GitHub's supported API/UI flow to deregister the exact recorded runner ID; the toolkit never accepts or handles the removal token. Only after a fresh inventory proves that exact registration absent may the generated local helper remove the exact instance. It never removes by a shared label, organization scope, or path glob. Local cleanup is bound to the exact instance root and refuses symlinked, foreign-owned, or unexpected content.
 
 ## 10. Routine Operations
 
@@ -367,14 +417,14 @@ Removal uses GitHub's supported exact runner-removal flow and exact instance ID.
 
 The project produces two artifact classes:
 
-1. a complete toolkit-source ZIP containing the reviewed source, schema, templates, scripts, tests, documentation, adoption prompt, and control inventories needed to reproduce rendering;
+1. a complete toolkit-source ZIP containing the reviewed source, schema, templates, scripts, tests, documentation, adoption prompt, validation locks, and reviewed `.github` governance/workflow files needed to reproduce rendering;
 2. a separately rendered per-instance ZIP containing only one non-secret project contract and its generated adoption files.
 
 Neither archive is built from a live runner root. A sample instance is test evidence, not a substitute for the transferable toolkit-source archive.
 
-The canonical ZIP profile is ZIP32 with stored/uncompressed members (`STORE`), no data descriptors, a fixed DOS timestamp, UNIX creator/version fields, explicit regular-file modes, zero extra fields, zero member/archive comments, no encryption, no explicit directory entries, and bytewise-sorted portable ASCII member paths using `/`. Generated member paths are ASCII by construction. The builder sets every local and central-directory field explicitly rather than relying on environment defaults.
+The canonical ZIP profile is ZIP32 with stored/uncompressed members (`STORE`), no data descriptors, a fixed DOS timestamp, UNIX creator/version fields, explicit regular-file modes, zero extra fields, zero member/archive comments, no encryption, no explicit directory entries, and bytewise-sorted portable ASCII member paths using `/`. Generated member paths are ASCII by construction. The builder sets every local and central-directory field explicitly rather than relying on environment defaults. Fixed limits are 256 total members including both control files, 8,388,608 bytes per member, 67,108,864 uncompressed bytes, and 83,886,080 archive bytes.
 
-Before writing or extracting, the verifier accepts regular-file members only and rejects duplicate names, symlinks, hard-link or special-file metadata, absolute paths, empty components, `.`/`..`, backslashes, control characters, non-ASCII names, macOS case-fold collisions, Unicode-normalization aliases, unsupported flags, inconsistent local/central headers, ZIP64, and configured count/size expansion limits. Verification precedes extraction, and extraction uses descriptor-relative creation in a new fail-if-exists directory rather than `extractall`.
+Before writing or extracting, the verifier accepts regular-file members only and rejects duplicate names, symlinks, hard-link or special-file metadata, absolute paths, empty components, `.`/`..`, backslashes, control characters, non-ASCII names, macOS case-fold collisions, Unicode-normalization aliases, unsupported flags, inconsistent local/central headers, ZIP64, and configured count/size expansion limits. It opens an input archive once, retains the exact bounded verified bytes in an immutable verification result, and extraction consumes only that result; replacing the source path after verification cannot affect extracted bytes. Extraction reparses the retained bytes and uses descriptor-relative creation in a new fail-if-exists directory rather than `extractall`.
 
 The builder:
 
