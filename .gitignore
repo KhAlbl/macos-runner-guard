@@ -1,0 +1,20 @@
+.DS_Store
+.idea/
+.vscode/
+__pycache__/
+.pytest_cache/
+.venv/
+dist/
+*.log
+*.zip
+
+# Never commit live runner state or credentials.
+.env
+.env.*
+!.env.example
+.runner
+.credentials
+.credentials_rsaparams
+.service
+_diag/
+_work*/
